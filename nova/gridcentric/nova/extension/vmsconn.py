@@ -300,12 +300,10 @@ class LibvirtConnection(VmsConnection):
     def configure_path_permissions(self):
         """
         For libvirt connections we need to ensure that the kvm instances have access to the vms
-        database and to the vmsfs mount point.
+        database.
         """
 
         import vms.db
-        import vms.kvm
-        import vms.config
 
         try:
             passwd = pwd.getpwnam(FLAGS.libvirt_user)
@@ -315,21 +313,6 @@ class LibvirtConnection(VmsConnection):
             raise Exception("Unable to find the libvirt user %s. "
                             "Please use the --libvirt_user flag to correct."
                             "Error: %s" % (FLAGS.libvirt_user, str(e)))
-
-        try:
-            vmsfs_path = vms.kvm.config.find_vmsfs()
-        except Exception, e:
-            raise Exception("Unable to located vmsfs. "
-                            "Please ensure the module is loaded and mounted. "
-                            "Error: %s" % str(e))
-
-        try:
-            for path in vmsfs_path, os.path.join(vmsfs_path, 'vms'):
-                os.chown(path, libvirt_uid, libvirt_gid)
-                os.chmod(path, 0770)
-        except Exception, e:
-            raise Exception("Unable to make %s owner of vmsfs: %s" %
-                            FLAGS.libvirt_user, str(e))
 
         def can_libvirt_write_access(dir):
             # Test if libvirt_user has W+X permissions in dir (which are
