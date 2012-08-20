@@ -1,18 +1,130 @@
-#!/bin/bash
+#!/usr/bin/env python
 
-set -e
+import os
+import pwd
+import sys
+import tempfile
+import shutil
+import errno
 
-function service_start() {
-    # If the nova-compute process is running, then we start.
-    if initctl status nova-compute | grep process >/dev/null 2>&1; then
-        service nova-gc restart 2>/dev/null || \
-        service nova-gc start;
-    else
-        service nova-gc restart 2>/dev/null || true
-    fi
-}
+from collections import namedtuple
 
-case $1 in
-    configure) service_start;;
-    triggered) service_start;;
-esac
+def service_start():
+    if os.system('initctl status nova-compute | grep process > /dev/null 2>&1') == 0:
+        if os.system('service nova-gc restart 2>/dev/null') != 0:
+            os.system('service nova-gc start')
+    else:
+        os.system('service nova-gc restart 2>/dev/null')
+
+MountTuple = namedtuple('Mount', ['dev', 'path', 'fs', 'options', 'dump', 'pass_'])
+
+class Mount(MountTuple):
+    @staticmethod
+    def parse_line(line):
+        line = line.split('#')[0].split()
+        if len(line) == 6:
+            return Mount(*line)
+        else:
+            return None
+
+    def option_dict(self):
+        '''Parses self.option as comma-separated key=val pairs.'''
+        return dict([o.partition('=')[0:3:2] for o in self.options.split(',')])
+
+    def updated_line(self, line):
+        if '#' in line:
+            tail = ' ' + line[line.index('#'):]
+        elif line.endswith('\n'):
+            tail = '\n'
+        else:
+            tail = ''
+        return ' '.join(self) + tail
+
+def safe_writelines(path, lines):
+    '''Atomically writes lines to path. Preserves permissions.'''
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(path))
+    try:
+        os.close(fd)
+        if os.path.exists(path):
+            shutil.copymode(path, tmp_path)
+            shutil.copystat(path, tmp_path)
+        f = open(tmp_path, 'w')
+        f.writelines(lines)
+        f.close()
+        os.rename(tmp_path, path)
+    except:
+        os.unlink(tmp_path)
+        raise
+
+def update_fstab(path, passwd):
+    '''Sets mode, uid, and gid for all vmsfs entries in fstab.
+
+    Returns a list of updated mounts.
+    '''
+    lines = []
+    updated_mounts = []
+
+    for line in open(path):
+        mount = Mount.parse_line(line)
+        if mount == None or mount.fs != 'vmsfs':
+            lines.append(line)
+        else:
+            opts = mount.option_dict()
+            new_opts = ''
+            if 'uid' not in opts:
+                new_opts += ',uid=%d' % passwd.pw_uid
+            if 'gid' not in opts:
+                new_opts += ',gid=%d' % passwd.pw_gid
+            if 'mode' not in opts:
+                new_opts += ',mode=775'
+            updated = mount._replace(options=mount.options + new_opts)
+            if updated.option_dict() != mount.option_dict():
+                updated_mounts.append(updated)
+            lines.append(updated.updated_line(line))
+
+    if len(updated_mounts) > 0:
+        safe_writelines(path, lines)
+
+    return updated_mounts
+
+def safe_int(x, default, base=0):
+    try:
+        return int(x, base)
+    except ValueError:
+        return default
+
+def update_mount(mount, chown, chmod):
+    try:
+        opts = mount.option_dict()
+        uid = safe_int(opts['uid'], -1)
+        gid = safe_int(opts['gid'], -1)
+        mode = safe_int(opts['mode'], None, 8)
+        # Try to modify the file first. We don't want to touch the directory
+        # if the file doesn't exist (i.e., vmsfs isn't mounted here).
+        chown(os.path.join(mount.path, 'vms'), uid, gid)
+        if mode != None:
+            chmod(os.path.join(mount.path, 'vms'), mode & 0666)
+        chown(mount.path, uid, gid)
+        if mode != None:
+            chmod(mount.path, mode)
+    except OSError, e:
+        # If the mountpoint doesn't exist or it isn't mounted, that's okay.
+        # We don't want the package installation to fail because somebody
+        # has bad /etc/fstab entries.
+        if e.errno != errno.ENOENT:
+            raise
+
+def main():
+    try:
+        passwd = pwd.getpwnam('libvirt-qemu')
+    except KeyError:
+        sys.stderr.write('Could not get uid and gid for libvirt-qemu. Not '
+                         'updating vmsfs entries in /etc/fstab.\n')
+    else:
+        updated = update_fstab('/etc/fstab', passwd)
+        for mount in updated:
+            update_mount(mount, os.chown, os.chmod)
+    service_start()
+
+if __name__ == '__main__':
+    main()
