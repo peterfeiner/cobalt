@@ -269,12 +269,18 @@ def create_pre_blessed_instance(context, instance=None, source_uuid=None):
     if instance == None:
         instance = {}
 
+    print '1 instance is', instance
+
     for key in ['metadata', 'system_metadata']:
         d = instance.get(key, {})
         d['blessed_from'] = source_uuid
         instance[key] = d
 
-    return create_instance(context, instance)
+    print '2 instance is', instance
+
+    r = create_instance(context, instance)
+    print '3 instance is', instance
+    return r
 
 def create_blessed_instance(context, instance=None, source_uuid=None):
     if source_uuid == None:
