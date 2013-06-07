@@ -231,7 +231,7 @@ class CobaltManager(manager.SchedulerDependentManager):
                 # we encounter transient failures. We retry up to 10 seconds.
                 return self.conductor_api.instance_update(context,
                                                           instance_uuid,
-                                                          kwargs)
+                                                          **kwargs)
             except:
                 # We retry the database update up to 60 seconds. This gives
                 # us a decent window for avoiding database restarts, etc.
@@ -240,6 +240,13 @@ class CobaltManager(manager.SchedulerDependentManager):
                     #time.sleep(5.0)
                 else:
                     raise
+
+    def _system_metadata_get(self, instance_ref):
+        '''Returns {key:value} dict of system_metadata from instance_ref.'''
+        result = {}
+        for record in instance_ref.get('system_metadata', []):
+            result[record['key']] = record['value']
+        return result
 
     @manager.periodic_task
     def _clean(self, context):
@@ -271,7 +278,7 @@ class CobaltManager(manager.SchedulerDependentManager):
                     host = self.host
 
                     # Grab metadata.
-                    system_metadata = instance['system_metadata']
+                    system_metadata = self._system_metadata_get(instance)
                     src_host = system_metadata.get('gc_src_host', None)
                     dst_host = system_metadata.get('gc_dst_host', None)
 
@@ -349,10 +356,11 @@ class CobaltManager(manager.SchedulerDependentManager):
         return return_list
 
     def _extract_image_refs(self, instance_ref):
-        return self._extract_list(instance_ref['system_metadata'], 'images')
+        return self._extract_list(self._system_metadata_get(instance_ref),
+                                  'images')
 
     def _extract_lvm_info(self, instance_ref):
-        lvms = self._extract_list(instance_ref['system_metadata'],
+        lvms = self._extract_list(self._system_metadata_get(instance_ref),
                                   'logical_volumes')
         lvm_info = {}
         for key, value in map(lambda x: x.split(':'), lvms):
@@ -360,7 +368,7 @@ class CobaltManager(manager.SchedulerDependentManager):
         return lvm_info
 
     def _extract_requested_networks(self, instance_ref):
-        networks = self._extract_list(instance_ref['system_metadata'],
+        networks = self._extract_list(self._system_metadata_get(instance_ref),
                                       'attached_networks')
         if len(networks) == 0:
             return None
@@ -393,7 +401,7 @@ class CobaltManager(manager.SchedulerDependentManager):
         if instance_ref is a LAUNCH instance, it returns the blessed instance.
         if instance_ref is neither, it returns NONE.
         """
-        system_metadata = instance_ref['system_metadata']
+        system_metadata = self._system_metadata_get(instance_ref)
         if "launched_from" in system_metadata:
             source_instance_uuid = system_metadata["launched_from"]
         elif "blessed_from" in system_metadata:
@@ -500,8 +508,6 @@ class CobaltManager(manager.SchedulerDependentManager):
         Construct the blessed instance, with the uuid instance_uuid. If migration_url is specified then
         bless will ensure a memory server is available at the given migration url.
         """
-        print 'XXX', instance_ref
-        assert instance_ref is not None
         context = context.elevated()
         if migration_url:
             # Tweak only this instance directly.
@@ -525,9 +531,8 @@ class CobaltManager(manager.SchedulerDependentManager):
         try:
             # Lock the source instance if blessing
             if not(migration):
-                old_dis = source_instance_ref['disable_terminate']
                 self._instance_update(context, source_instance_ref['uuid'],
-                                      disable_terminate=True, task_state='blessing')
+                                      task_state='blessing')
                 LOG.debug("Locking source instance %s (fn:%s)" %
                                 (source_instance_ref['uuid'], "bless_instance"))
                 self.compute_manager.compute_api.lock(context, source_instance_ref)
@@ -556,7 +561,7 @@ class CobaltManager(manager.SchedulerDependentManager):
                     LOG.debug("Unlocked source instance %s (fn:%s)" %
                                    (source_instance_ref['uuid'], "bless_instance"))
                 self._instance_update(context, source_instance_ref['uuid'],
-                                      disable_terminate=old_dis is True, task_state=None)
+                                      task_state=None)
 
         try:
             # Extract the image references.
@@ -575,7 +580,7 @@ class CobaltManager(manager.SchedulerDependentManager):
             # we simply clean up all system_metadata and attempt to mark the VM
             # as in the ERROR state. This may fail also, but at least we
             # attempt to leave as little around as possible.
-            system_metadata = instance_ref['system_metadata']
+            system_metadata = self._system_metadata_get(instance_ref)
             system_metadata['images'] = ','.join(image_refs)
             system_metadata['logical_volumes'] = ','.join(lvms)
             if not(migration):
@@ -592,7 +597,6 @@ class CobaltManager(manager.SchedulerDependentManager):
                 self._instance_update(context, instance_uuid,
                                       vm_state="blessed", task_state=None,
                                       launched_at=timeutils.utcnow(),
-                                      disable_terminate=True,
                                       system_metadata=system_metadata)
             else:
                 self._instance_update(context, instance_uuid,
@@ -683,7 +687,7 @@ class CobaltManager(manager.SchedulerDependentManager):
         network_info = self.network_api.get_instance_nw_info(context, instance_ref)
 
         # Update the system_metadata for migration.
-        system_metadata = instance_ref['system_metadata']
+        system_metadata = self._system_metadata_get(instance_ref)
         system_metadata['gc_src_host'] = self.host
         system_metadata['gc_dst_host'] = dest
         self._instance_update(context, instance_uuid,
@@ -1050,10 +1054,10 @@ class CobaltManager(manager.SchedulerDependentManager):
         # using.
         image_ids = self.vms_conn.import_instance(context, instance_ref, image_id)
         image_ids_str = ','.join(image_ids)
-        system_metadata = instance_ref['system_metadata']
+        system_metadata = self._system_metadata_get(instance_ref)
         system_metadata['images'] = image_ids_str
         self._instance_update(context, instance_uuid, vm_state='blessed',
-                disable_terminate=True, system_metadata=system_metadata)
+                              system_metadata=system_metadata)
 
     def install_policy(self, context, policy_ini_string=None):
         """

@@ -218,6 +218,9 @@ class API(base.Base):
            'launch_index': launch_index,
            'root_device_name': instance_ref['root_device_name'],
            'power_state': power_state.NOSTATE,
+           # Set disable_terminate on bless so terminate in nova-api's barfs on
+           # a blessed instance.
+           'disable_terminate': not launch,
         }
         new_instance_ref = self.db.instance_create(context, instance)
 
@@ -339,7 +342,8 @@ class API(base.Base):
             name = params.get('name')
             if name is None:
                 name = "%s-%s" % (instance['display_name'], str(clonenum))
-            new_instance = self._copy_instance(context, instance_uuid, name, launch=False)
+            new_instance = self._copy_instance(context, instance_uuid, name,
+                                               launch=False, disable_terminate=True)
 
             LOG.debug(_("Casting cobalt message for bless_instance") % locals())
             self._cast_cobalt_message('bless_instance', context, new_instance['uuid'],
@@ -449,7 +453,7 @@ class API(base.Base):
             self._commit_reservation(context, reservations)
         except Exception, e:
             self._rollback_reservation(context, reservations)
-            raise e
+            raise
 
         return self.get(context, launch_instances[0]['uuid'])
 
@@ -605,6 +609,7 @@ class API(base.Base):
         # we are essentially creating a new blessed instance into the system.
 
         fields = data['fields']
+        fields['disable_terminate'] = True
 
         if not context.is_admin:
             fields['project_id'] = context.project_id

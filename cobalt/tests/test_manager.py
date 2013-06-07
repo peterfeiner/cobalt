@@ -39,6 +39,9 @@ class CobaltManagerTestCase(unittest.TestCase):
     def setUp(self):
         CONF.compute_driver = 'fake.FakeDriver'
 
+        # Mock out all of the policy enforcement (the tests don't have a defined policy)
+        utils.mock_policy()
+
         # Copy the clean database over
         shutil.copyfile(os.path.join(CONF.state_path, CONF.sqlite_clean_db),
                         os.path.join(CONF.state_path, CONF.sqlite_db))
@@ -50,9 +53,6 @@ class CobaltManagerTestCase(unittest.TestCase):
         self.cobalt._instance_network_info = utils.fake_networkinfo
 
         self.context = nova_context.RequestContext('fake', 'fake', True)
-
-        # Mock out all of the policy enforcement (the tests don't have a defined policy)
-        utils.mock_policy()
 
     def test_target_memory_string_conversion_case_insensitive(self):
 
