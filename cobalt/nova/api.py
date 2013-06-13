@@ -16,6 +16,7 @@
 
 """Handles all requests relating to Cobalt functionality."""
 import random
+import sys
 
 from nova import availability_zones
 from nova import context
@@ -143,6 +144,7 @@ class API(base.Base):
 
     def _rollback_reservation(self, context, reservations):
         quota.QUOTAS.rollback(context, reservations)
+
 
     def _copy_instance(self, context, instance_uuid, new_name, launch=False,
                        new_user_data=None, security_groups=None, key_name=None,
@@ -343,15 +345,17 @@ class API(base.Base):
             if name is None:
                 name = "%s-%s" % (instance['display_name'], str(clonenum))
             new_instance = self._copy_instance(context, instance_uuid, name,
-                                               launch=False, disable_terminate=True)
+                                               launch=False)
 
             LOG.debug(_("Casting cobalt message for bless_instance") % locals())
             self._cast_cobalt_message('bless_instance', context, new_instance['uuid'],
                                        host=instance['host'])
             self._commit_reservation(context, reservations)
         except:
+            ei = sys.exc_info()
             self._rollback_reservation(context, reservations)
-            raise
+            raise ei[0], ei[1], ei[2]
+
 
         # We reload the instance because the manager may have change its state (most likely it
         # did).
@@ -383,8 +387,9 @@ class API(base.Base):
             self._cast_cobalt_message('discard_instance', context, instance_uuid)
             self._commit_reservation(context, reservations)
         except:
+            ei = sys.exc_info()
             self._rollback_reservation(context, reservations)
-            raise
+            raise ei[0], ei[1], ei[2]
 
     def launch_instance(self, context, instance_uuid, params={}):
         pid = context.project_id
@@ -451,9 +456,10 @@ class API(base.Base):
                     { "params" : params })
 
             self._commit_reservation(context, reservations)
-        except Exception, e:
+        except:
+            ei = sys.exc_info()
             self._rollback_reservation(context, reservations)
-            raise
+            raise ei[0], ei[1], ei[2]
 
         return self.get(context, launch_instances[0]['uuid'])
 

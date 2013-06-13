@@ -822,7 +822,7 @@ class CobaltManager(manager.SchedulerDependentManager):
                               vm_state=vm_states.DELETED,
                               task_state=None,
                               terminated_at=timeutils.utcnow())
-        self.conductor_api.instance_destroy(context, instance_uuid)
+        self.conductor_api.instance_destroy(context, instance_ref)
         self._notify(context, instance_ref, "discard.end")
 
     def _instance_network_info(self, context, instance_ref, already_allocated, requested_networks=None):
@@ -935,9 +935,9 @@ class CobaltManager(manager.SchedulerDependentManager):
             raise
 
         # Extract the image ids from the source instance.
-        image_refs = self._extract_image_refs(instance_ref)
-        lvm_info = self._extract_lvm_info(instance_ref)
-        requested_networks = self._extract_requested_networks(instance_ref)
+        image_refs = self._extract_image_refs(source_instance_ref)
+        lvm_info = self._extract_lvm_info(source_instance_ref)
+        requested_networks = self._extract_requested_networks(source_instance_ref)
 
         if migration_network_info != None:
             # (dscannell): Since this migration_network_info came over the wire we need
