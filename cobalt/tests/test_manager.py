@@ -38,6 +38,7 @@ class CobaltManagerTestCase(unittest.TestCase):
 
     def setUp(self):
         CONF.compute_driver = 'fake.FakeDriver'
+        CONF.conductor.use_local = True
 
         # Mock out all of the policy enforcement (the tests don't have a defined policy)
         utils.mock_policy()

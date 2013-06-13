@@ -154,7 +154,7 @@ class CobaltManager(manager.SchedulerDependentManager):
         self.cobalt_api = API()
         self.compute_manager = compute_manager.ComputeManager()
         self.volume_api = volume.API()
-        self.conductor_api = conductor.API(use_local=True)
+        self.conductor_api = conductor.API()
 
         self.vms_conn = kwargs.pop('vmsconn', None)
         self._init_vms()
