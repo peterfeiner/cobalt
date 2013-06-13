@@ -213,7 +213,7 @@ class VmsConnection:
                    skip_image_service=False,
                    image_refs=[],
                    lvm_info={}):
-        return (new_instance_ref.name, None)
+        return (new_instance_ref['name'], None)
 
     @_log_call
     def post_launch(self, context,

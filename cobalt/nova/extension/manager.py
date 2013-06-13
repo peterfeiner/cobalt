@@ -852,12 +852,12 @@ class CobaltManager(manager.SchedulerDependentManager):
                           host=self.host)
                 instance_ref['host'] = self.host
                 LOG.debug(_("Making call to network for launching instance=%s"), \
-                      instance_ref.name)
+                      instance_ref['name'])
                 network_info = self.network_api.allocate_for_instance(context,
                                             instance_ref, vpn=is_vpn,
                                             requested_networks=requested_networks)
                 LOG.debug(_("Made call to network for launching instance=%s, network_info=%s"),
-                      instance_ref.name, network_info)
+                      instance_ref['name'], network_info)
             except:
                 _log_error("network allocation")
 
