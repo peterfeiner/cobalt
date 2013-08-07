@@ -14,25 +14,53 @@
 #    under the License.
 
 import os
-import subprocess
+import re
+
 from distutils.core import setup
+from StringIO import StringIO
+from subprocess import Popen, PIPE
+
+try:
+    from pkginfo import UnpackedSDist
+except ImportError:
+    import email
+    class UnpackedSDist(object):
+        def __init__(self, filename):
+            path = os.path.join(os.path.dirname(filename), 'PKG-INFO')
+            try:
+                f = open(path)
+            except IOError, e:
+                raise ValueError(e)
+            try:
+                self.__message = email.message_from_file(f)
+            finally:
+                f.close()
+
+        def __getattr__(self, name):
+            return self.__message[name]
+
+class CommandError(Exception):
+    pass
 
 def git(*args):
     topdir = os.path.abspath(os.path.dirname(__file__))
-    p = subprocess.Popen(('git',) + args, stdout=subprocess.PIPE, cwd=topdir)
-    return p.communicate()[0]
+    cmd = ('git',) + args
+    p = Popen(cmd, stdout=PIPE, stderr=PIPE, cwd=topdir)
+    out, err = p.communicate()
+    if p.returncode != 0:
+        raise CommandError('%s failed: %s' % (cmd, err))
+    return out
 
 def get_version():
     v = os.getenv('VERSION', None)
     if v is None:
         try:
-            from pkginfo import UnpackedSDist
             d = UnpackedSDist(__file__)
             v = d.version
         except ValueError:
             try:
                 v = git('describe', '--tags').strip().split('/', 1)[1].split('-', 1)[1]
-            except Exception:
+            except CommandError:
                 v = '0.0'
     return v
 
@@ -40,7 +68,6 @@ def get_package():
     p = os.getenv('PACKAGE', None)
     if p is None:
         try:
-            from pkginfo import UnpackedSDist
             d = UnpackedSDist(__file__)
             p = d.name
         except ValueError:
@@ -63,7 +90,7 @@ INSTALL_REQUIRES = read_file_list(PIP_REQUIRES)
 COMMON = dict(
     author='GridCentric',
     author_email='support@gridcentric.com',
-    namespace_packages=['gridcentric'],
+    #namespace_packages=['cobalt'],
     test_requires = read_file_list(TEST_REQUIRES),
     url='http://www.gridcentric.com/',
     version=VERSION,

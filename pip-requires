@@ -16,7 +16,7 @@ sqlalchemy-migrate>=0.7.2
 netaddr
 suds==0.4
 paramiko
-pyasn1
+pyasn1>=0.0.11a
 Babel>=0.9.6
 iso8601>=0.1.4
 httplib2

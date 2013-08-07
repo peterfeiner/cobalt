@@ -17,3 +17,8 @@ test-*.xml
 .project
 .pydevproject
 .idea
+MANIFEST
+.pipcache
+.tox
+build/
+tags
