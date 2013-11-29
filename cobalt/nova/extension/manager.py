@@ -174,11 +174,11 @@ def _retry_rpc(fn):
 
     return wrapped_fn
 
-class CobaltManager(manager.SchedulerDependentManager):
+class CobaltManager(manager.Manager):
 
     def __init__(self, *args, **kwargs):
 
-        self.quantum_attempted = False
+        self.neutron_attempted = False
         self.network_api = network.API()
         self.compute_manager = compute_manager.ComputeManager()
         self.volume_api = volume.API()
@@ -387,27 +387,27 @@ class CobaltManager(manager.SchedulerDependentManager):
                                       'attached_networks')
         if len(networks) == 0:
             return None
-        if self._is_quantum_v2():
+        if self._is_neutron_v2():
             return [[id, None, None] for id in networks]
         else:
             return [[id, None] for id in networks]
 
-    def _is_quantum_v2(self):
+    def _is_neutron_v2(self):
         # This has been stolen from the latest nova API code.
-        # It is necessary because some of the quantum types are
+        # It is necessary because some of the neutron types are
         # different for later APIs.
-        if self.quantum_attempted:
-            return self.have_quantum
+        if self.neutron_attempted:
+            return self.have_neutron
         try:
-            self.quantum_attempted = True
-            from nova.network.quantumv2 import api as quantum_api
-            self.have_quantum = issubclass(
+            self.neutron_attempted = True
+            from nova.network.neutronv2 import api as neutron_api
+            self.have_neutron = issubclass(
             importutils.import_class(CONF.network_api_class),
-               quantum_api.API)
+               neutron_api.API)
         except ImportError:
-            self.have_quantum = False
+            self.have_neutron = False
 
-        return self.have_quantum
+        return self.have_neutron
 
     def _get_source_instance(self, context, instance_ref):
         """
@@ -741,10 +741,11 @@ class CobaltManager(manager.SchedulerDependentManager):
         instance_ref['host'] = dest
         rpc.call(context, compute_dest_queue,
                  {"method": "pre_live_migration",
-                  "version": "2.2",
+                  "version": "3.0",
                   "args": {'instance': instance_ref,
                            'block_migration': False,
-                           'disk': None}},
+                           'disk': None,
+                           'migrate_data': None}},
                  timeout=CONF.cobalt_compute_timeout)
         instance_ref['host'] = self.host
 
@@ -827,7 +828,7 @@ class CobaltManager(manager.SchedulerDependentManager):
                 self.network_api.setup_networks_on_host(context, instance_ref, host=dest)
                 rpc.call(context, compute_source_queue,
                     {"method": "rollback_live_migration_at_destination",
-                     "version": "2.2",
+                     "version": "2.0",
                      "args": {'instance': instance_ref}})
             except:
                 _log_error("post migration cleanup")
@@ -1112,10 +1113,11 @@ class CobaltManager(manager.SchedulerDependentManager):
                 rpc.call(context,
                     rpc.queue_get_for(context, CONF.compute_topic, self.host),
                     {"method": "pre_live_migration",
-                     "version": "2.2",
+                     "version": "3.0",
                      "args": {'instance': instance_ref,
                               'block_migration': False,
-                              'disk': None}},
+                              'disk': None,
+                              'migrate_data': None}},
                     timeout=CONF.cobalt_compute_timeout)
 
             vms_policy = self._generate_vms_policy_name(context, instance_ref,
